@@ -1,0 +1,35 @@
+{
+	"name": "svelte-rag-assistant",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json --watch"
+	},
+	"dependencies": {
+		"@sveltejs/adapter-auto": "^5.0.0",
+		"@sveltejs/kit": "^1.20.4",
+		"@sveltejs/vite-plugin-svelte": "^5.0.3",
+		"@tailwindcss/vite": "^4.0.17",
+		"autoprefixer": "^10.4.21",
+		"chromadb": "^2.1.0",
+		"langchain": "^0.0.175",
+		"mammoth": "^1.9.0",
+		"pdf-parse": "^1.1.1",
+		"postcss": "^8.5.3",
+		"postcss-load-config": "^4.0.1",
+		"snarkdown": "^2.0.0",
+		"svelte": "^4.2.7",
+		"svelte-check": "^3.4.3",
+		"tailwindcss": "^4.0.17",
+		"vite": "^4.4.2"
+	},
+	"devDependencies": {
+		"@types/node": "^20.10.0",
+		"typescript": "^5.0.0"
+	}
+}
