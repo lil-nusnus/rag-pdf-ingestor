@@ -12,6 +12,7 @@
   function handleSubmit() {
     console.log(query)
     dispatch('sendMessage', query);
+    query = '';
   }
   
   function handleKeydown(event) {

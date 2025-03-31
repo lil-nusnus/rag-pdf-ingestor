@@ -1,10 +1,10 @@
 <script>
   import { onMount } from 'svelte';
-  import fs from 'fs';
   
   export let document;
   let content = '';
   let loading = true;
+  let error = null;
   
   $: if (document) {
     loadDocumentContent();
@@ -12,30 +12,38 @@
   
   async function loadDocumentContent() {
     loading = true;
+    error = null;
     
     try {
-      // In a real implementation, you would make an API call to get document content
-      // This is a placeholder that simulates reading content
-      const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-      await delay(500);
-      
-      // Simulate content based on file type
       const ext = document.name.split('.').pop().toLowerCase();
-      if (ext === 'txt' || ext === 'md') {
-        content = fs.readFileSync(document.path, 'utf-8');
-
-      } else if (ext === 'pdf') {
-        content = `[PDF Content Preview] This is a preview of ${document.name}. In a real implementation, this would show extracted text or a PDF preview.`;
-      } else if (ext === 'docx') {
-        content = `[DOCX Content Preview] This is a preview of ${document.name}. In a real implementation, this would show extracted text from the document.`;
-      } else if (ext === 'json') {
-        content = `{\n  "title": "Sample JSON from ${document.name}",\n  "description": "This is simulated JSON content"\n}`;
-      } else {
-        content = `Content preview not available for ${document.name}`;
+      
+      // Make API call to get document content
+      const response = await fetch(`/api/documents/preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          path: document.path,
+          type: ext
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load document: ${response.statusText}`);
       }
-    } catch (error) {
-      console.error('Error loading document content:', error);
-      content = `Error loading content: ${error.message}`;
+      
+      const data = await response.json();
+      
+      if (ext === 'json') {
+        // Format JSON nicely
+        content = JSON.stringify(data.content, null, 2);
+      } else {
+        content = data.content;
+      }
+    } catch (err) {
+      console.error('Error loading document content:', err);
+      error = err;
     } finally {
       loading = false;
     }
@@ -55,6 +63,11 @@
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
+      </div>
+    {:else if error}
+      <div class="text-red-600 p-2">
+        <p>Error loading content:</p>
+        <p>{error.message}</p>
       </div>
     {:else}
       <pre class="text-sm text-gray-700 whitespace-pre-wrap">{content}</pre>
