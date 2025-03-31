@@ -5,7 +5,6 @@ import { generateEmbeddings } from '$lib/services/ollamaService.js';
 async function queryModel(promptTemplate, model = 'gemma3', temperature = 0.1) {
     // clear chroma collection
     const client = new ChromaClient();
-    const collection = await client.deleteCollection({ name: "local_documents" });
     const response = await fetch('http://localhost:11434/api/chat', {
         method: 'POST',
         headers: {
@@ -100,7 +99,6 @@ export async function POST({ request }) {
         const collection = await getChromaCollection();
         const embeddingResult = await generateEmbeddings(query.split(' '));
         
-        console.log('Embedding Result:', embeddingResult.embeddings[0]);
 
         // return json(embeddingResult.embedding);
         
@@ -143,14 +141,9 @@ export async function POST({ request }) {
     Contexts:
     ${contextText}
     
+    ------------------------
     Question: ${query}
 
-    On the context this is all of the documents that are related to the query:
-    - the document starts with     ------ START DOCUMENT ---- and ends with ------ END DOCUMENT ----
-    - only go through the documents that are related to the query
-    - if there is documents that are not related to the query, ignore them
-    - if there is documents that are related to the query, answer the question based on the context provided.
-    - if you don't know the answer from the context, say so.
     `;
 
         const responseData = await queryModel(promptTemplate, 'gemma3');
