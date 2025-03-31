@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { ChromaClient } from 'chromadb';
+import { ChromaClient, OllamaEmbeddingFunction } from 'chromadb';
 import { generateEmbeddings } from '$lib/services/ollamaService.js';
 
 async function queryModel(promptTemplate, model = 'gemma3', temperature = 0.1) {
@@ -27,7 +27,10 @@ async function queryModel(promptTemplate, model = 'gemma3', temperature = 0.1) {
 }
 
 async function getChromaCollection() {
-    const client = new ChromaClient();
+    const client = new ChromaClient({
+        path: 'http://localhost:8000'
+    });
+    
     return await client.getCollection({ name: "local_documents" });
 }
 
@@ -42,12 +45,30 @@ function formatResults(results) {
 
 export async function GET() {
     try {
-        const collection = await getChromaCollection();
-        
-        const results = await collection.query({
-            queryTexts: ["summarize", "CL-2024-031"],
-            n_results: 5
+        const client = new ChromaClient({
+            path: 'http://localhost:8000'
         });
+        client.database = 'local_documents';
+        const collection = await client.getOrCreateCollection({
+            name: "local_documents",
+            embeddingFunction: new OllamaEmbeddingFunction({
+                model: 'mxbai-embed-large',
+                url: 'http://localhost:11434',
+            }),
+        });
+        const embeddingResult = await generateEmbeddings('summarize CL-2024-031'.split(' '));
+        if (!embeddingResult.embeddings) {
+            throw new Error('Failed to generate embeddings');
+        }
+        const results = await collection.query({
+            queryEmbeddings: [embeddingResult.embeddings[0]],
+            n_results: 5,
+        });
+
+        return json({ success: true, results });
+        if (!results || !results.metadatas || !results.documents) {
+            throw new Error('No results found');
+        }
 
         const sortedResults = formatResults(results);
         const contextText = sortedResults.map(s => s.content).join('\n\n');
@@ -79,23 +100,30 @@ export async function POST({ request }) {
         const collection = await getChromaCollection();
         const embeddingResult = await generateEmbeddings(query.split(' '));
         
+        console.log('Embedding Result:', embeddingResult.embeddings[0]);
+
+        // return json(embeddingResult.embedding);
+        
         if (!embeddingResult.embeddings) {
             throw new Error('Failed to generate embeddings');
         }
+
+        /// As a mobile banking solutions provider, covering mobile apps, backend and intrastructure, what is my involvement in Consumer Redress Mechanism Standards for Account-to-Account Electronic Fund Transfers under the National Payment System Framework
+        
         
         // // Uncomment the following lines if you want to use embeddings for querying
-        // const results = await collection.query({
-        //     queryEmbeddings: [embeddingResult.embeddings[0]],
-        //     n_results: 5,
-        // });
-
-
         const results = await collection.query({
-            // you may change this as split or not split
-            //queryTexts: query.split(' '),
-            queryTexts: [query],
-            n_results: 5
+            queryEmbeddings: embeddingResult.embeddings,
+            n_results: 5,
         });
+
+
+        // const results = await collection.query({
+        //     // you may change this as split or not split
+        //     //queryTexts: query.split(' '),
+        //     queryTexts: [query],
+        //     n_results: 5
+        // });
 
         ///////////////////////////////////////////
 

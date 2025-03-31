@@ -1,5 +1,5 @@
 const OLLAMA_BASE_URL = 'http://localhost:11434'; // Default Ollama API URL
-const EMBEDDING_MODEL = 'mxbai-embed-large';
+const EMBEDDING_MODEL = 'nomic-embed-text';
 const LLM_MODEL = 'deepseek-r1';
 
 // Generate embeddings for text using Ollama
@@ -17,38 +17,48 @@ if (texts.length === 0) {
 try {
     const embeddings = [];
     
-    for (const [i, text] of texts) {
-        // Skip empty strings
-        if (!text || text.trim() === '') {
-            continue;
-        }
-        
-        const response = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: EMBEDDING_MODEL,
-                prompt: text
-            })
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.text().catch(() => null);
-            throw new Error(`Ollama API returned ${response.status}${errorData ? `: ${errorData}` : ''}`);
-        }
-        
-        const data = await response.json();
-        embeddings.push(data.embedding);
+    for (const text of texts) {
+      // Skip empty strings
+      if (!text || text.trim() === '') {
+        continue;
+      }
+      
+      const response = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: EMBEDDING_MODEL,
+          prompt: text
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.text().catch(() => null);
+        throw new Error(`Ollama API returned ${response.status}${errorData ? `: ${errorData}` : ''}`);
+      }
+      
+      const data = await response.json();
+      embeddings.push(data.embedding);
     }
+
+    // console.log(embeddings)
+    // Check if embeddings are valid
+    if (embeddings.some(embedding => !Array.isArray(embedding))) {
+        throw new Error('Invalid embedding format received from Ollama API');
+    }
+
+
     
-    return { success: true, embeddings };
+    return { success: true, embeddings }; // embeddings is already a 2D array for ChromaDB
 } catch (error) {
     console.error('Error generating embeddings:', error);
     return { success: false, error: error.message };
 }
 }
+
+
 
 // Generate a response from the LLM based on a prompt
 export async function generateResponse(prompt) {

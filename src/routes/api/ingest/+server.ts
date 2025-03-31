@@ -46,7 +46,6 @@ async function setupChroma() {
   try {
     collection = await chromaClient.getOrCreateCollection({
       name: "local_documents",
-      metadata: { "hnsw:space": "cosine" },
     });
   } catch (err) {
     console.error("Error setting up ChromaDB:", err);
