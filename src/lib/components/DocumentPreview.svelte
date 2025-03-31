@@ -18,7 +18,7 @@
       const ext = document.name.split('.').pop().toLowerCase();
       
       // Make API call to get document content
-      const response = await fetch(`/api/documents/preview`, {
+      const response = await fetch(`/api/documents`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -37,9 +37,9 @@
       
       if (ext === 'json') {
         // Format JSON nicely
-        content = JSON.stringify(data.content, null, 2);
+        content = JSON.stringify(data.preview, null, 2);
       } else {
-        content = data.content;
+        content = data.preview;
       }
     } catch (err) {
       console.error('Error loading document content:', err);
