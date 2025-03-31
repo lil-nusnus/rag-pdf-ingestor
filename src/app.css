@@ -47,3 +47,7 @@ body {
 } */
 
 @import "tailwindcss";
+
+.code {
+  @apply bg-gray-800 text-white p-4 rounded-lg font-mono;
+}

@@ -42,7 +42,7 @@
                 <div class="w-2 h-2 bg-gray-500 rounded-full animate-pulse" style="animation-delay: 0.4s"></div>
               </div>
             {:else}
-              <p class="whitespace-pre-wrap">{snarkdown(message.content).replace(/<\/?[^>]+(>|$)/g, "")}</p>
+              <p class="whitespace-pre-wrap break-words">{@html snarkdown(message.content.replace(/<([^</> ]+)[^<>]*?>[^<>]*?<\/\1> */gi, ""))}</p>
               
               {#if message.sources && message.sources.length > 0}
                 <div class="mt-2 pt-2 border-t border-gray-200">

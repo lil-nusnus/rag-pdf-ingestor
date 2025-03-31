@@ -88,13 +88,15 @@ export async function POST({ request }) {
 
 
         const results = await collection.query({
+            // you may change this as split or not split
+            //queryTexts: query.split(' '),
             queryTexts: [query],
             n_results: 5
         });
 
         ///////////////////////////////////////////
 
-        
+
         const sortedResults = formatResults(results);
 
         const contextText = sortedResults.map(s => `
