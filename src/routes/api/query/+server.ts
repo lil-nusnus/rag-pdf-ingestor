@@ -3,6 +3,9 @@ import { ChromaClient } from 'chromadb';
 import { generateEmbeddings } from '$lib/services/ollamaService.js';
 
 async function queryModel(promptTemplate, model = 'gemma3', temperature = 0.1) {
+    // clear chroma collection
+    const client = new ChromaClient();
+    const collection = await client.deleteCollection({ name: "local_documents" });
     const response = await fetch('http://localhost:11434/api/chat', {
         method: 'POST',
         headers: {

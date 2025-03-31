@@ -9,7 +9,7 @@ import mammoth from 'mammoth';
 
 // Configure ChromaDB
 const chromaClient = new ChromaClient({
-  path: 'http://localhost:8000/api/v2/tenants/defaulttenant/databases/default_database'
+  path: 'http://localhost:8000'
 });
 let collection: Collection;
 
@@ -46,7 +46,6 @@ async function setupChroma() {
   try {
     collection = await chromaClient.getOrCreateCollection({
       name: "local_documents",
-      database: '',
       metadata: { "hnsw:space": "cosine" },
     });
   } catch (err) {
