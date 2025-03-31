@@ -1,182 +1,241 @@
 import { json } from '@sveltejs/kit';
-import { ChromaClient, OllamaEmbeddingFunction } from 'chromadb';
+import { ChromaClient } from 'chromadb';
 import { generateEmbeddings } from '$lib/services/ollamaService.js';
 
-async function queryModel(promptTemplate, model = 'gemma3', temperature = 0.1) {
-    // clear chroma collection
-    const client = new ChromaClient();
-    const response = await fetch('http://localhost:11434/api/chat', {
+async function queryModel (prompt, template, model = 'gemma3') {
+    const response = await fetch(`http://localhost:11434/api/chat`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
             model,
-            messages: [{ role: 'user', content: promptTemplate }],
-            options: { temperature },
+            messages:[
+                { role: 'assistant', content: template },
+                { role: 'user', content: `Based on the context please answer this question ${prompt}` }
+            ],
+            options: {
+                temperature: 0.7
+            },
             stream: false
         })
     });
-    
+
     if (!response.ok) {
-        throw new Error('Failed to get response from the model');
+        throw new Error(`Model API error: ${response.statusText}`);
     }
-    
+
     return await response.json();
 }
 
+let chromaClient: ChromaClient | null = null;
+
 async function getChromaCollection() {
-    const client = new ChromaClient({
-        path: 'http://localhost:8000'
-    });
+    if (!chromaClient) {
+        chromaClient = new ChromaClient({
+            path: process.env.CHROMA_URL || 'http://localhost:8000'
+        });
+    }
     
-    return await client.getCollection({ name: "local_documents" });
+    return await chromaClient.getCollection({ name: 'local_documents' });
 }
 
 function formatResults(results) {
-    return results.metadatas[0].map((metadata, index) => ({
-        source: metadata.source,
-        content: results.documents[0][index],
-        score: results.distances[0][index],
-        chunk: metadata.chunk
-    })).sort((a, b) => a.chunk - b.chunk);
-}
-
-export async function GET() {
-    try {
-        const client = new ChromaClient({
-            path: 'http://localhost:8000'
-        });
-        client.database = 'local_documents';
-        const collection = await client.getOrCreateCollection({
-            name: "local_documents",
-            embeddingFunction: new OllamaEmbeddingFunction({
-                model: 'mxbai-embed-large',
-                url: 'http://localhost:11434',
-            }),
-        });
-        const embeddingResult = await generateEmbeddings('summarize CL-2024-031'.split(' '));
-        if (!embeddingResult.embeddings) {
-            throw new Error('Failed to generate embeddings');
-        }
-        const results = await collection.query({
-            queryEmbeddings: [embeddingResult.embeddings[0]],
-            n_results: 5,
-        });
-
-        return json({ success: true, results });
-        if (!results || !results.metadatas || !results.documents) {
-            throw new Error('No results found');
-        }
-
-        const sortedResults = formatResults(results);
-        const contextText = sortedResults.map(s => s.content).join('\n\n');
-        
-        const promptTemplate = `
-    You are a helpful assistant that answers questions based on the provided context.
-    Context:
-    ${contextText}
-    Question: summarize CL-2024-031
-    Answer the question based on the context provided. If you don't know the answer from the context, say so.
-    `;
-        
-        const data = await queryModel(promptTemplate, 'deepseek-r1');
-        return json({ success: true, sources: sortedResults, answer: data });
-    } catch (error) {
-        console.error('Error processing query:', error);
-        return json({ success: false, error: error.message }, { status: 500 });
-    }
+    const { ids, documents, metadatas, distances } = results;
+    
+    if (!ids || !ids.length) return [];
+    
+    return ids[0].map((id, i) => {
+        return {
+            id,
+            content: documents[0][i],
+            metadata: metadatas[0][i],
+            score: distances[0][i],
+            source: metadatas[0][i]?.source || 'Unknown source'
+        };
+    });
 }
 
 export async function POST({ request }) {
     try {
-        const { query } = await request.json();
+        let { query } = await request.json();
 
         if (!query || query.trim() === '') {
             return json({ success: false, error: 'Query is required' }, { status: 400 });
         }
 
+        query = preprocessQuery(query);
+        const expandedQueries = generateQueryExpansions(query);
+        
         const collection = await getChromaCollection();
-
-        const aiQueryPrompt = `
-        create an accurate chromadb query for this question: ${query}
-        - it must be accurate so that the chroma collection can find the relevant documents
-        - it must contain the circular letter number, the date, and the title of the circular letter
-        - it must be in the form of a list of words, separated by space
-        - it must not contain any other text or punctuation
-        - it must not contain any special characters or symbols
-        - it must not contain any stop words or filler words
-        - IMPORTANT: no other text or explanation is needed, just the query
-        `;
-
-        const aiQueryResponse = await queryModel(aiQueryPrompt, 'gemma3', 0.1);
-        console.log('AI Query Response:', aiQueryResponse);
-        const aiQuery = aiQueryResponse.message.content.split(' ').map(word => word.trim()).filter(word => word !== '');
-        console.log('AI Query:', aiQuery);
         
-        const embeddingResult = await generateEmbeddings(aiQuery);
-        
-
-        // return json(embeddingResult.embedding);
+        const embeddingResult = await generateEmbeddings([query, ...expandedQueries]);
         
         if (!embeddingResult.embeddings) {
             throw new Error('Failed to generate embeddings');
         }
 
-        /// As a mobile banking solutions provider, covering mobile apps, backend and intrastructure, what is my involvement in Consumer Redress Mechanism Standards for Account-to-Account Electronic Fund Transfers under the National Payment System Framework
-        
-        
-        // // Uncomment the following lines if you want to use embeddings for querying
         const results = await collection.query({
             queryEmbeddings: embeddingResult.embeddings,
-            n_results: 5,
-            include: ["documents", "metadatas", "distances"]
+            queryTexts: [query],
+            n_results: 10,
+            include: ["documents", "metadatas", "distances"],
+            where: { "document_type": { "$in": ["policy", "circular", "memorandum"] } }
         });
 
+        let formattedResults = formatResults(results);
+        
+        const rerankedResults = applyMMR(
+            formattedResults, 
+            embeddingResult.embeddings, 
+            {
+                lambda: 0.7,
+                k: 10
+            }
+        );
 
-        // const results = await collection.query({
-        //     // you may change this as split or not split
-        //     //queryTexts: query.split(' '),
-        //     queryTexts: [query],
-        //     n_results: 5
-        // });
-
-        ///////////////////////////////////////////
-
-
-        const sortedResults = formatResults(results);
-
-        const contextText = sortedResults.map(s => `
-    ------ START DOCUMENT ----
-    Source: ${s.source}\n
-    Context: ${s.content}\n
-    ------ END DOCUMENT ----
-        `).join('\n\n');
+        const contextText = rerankedResults.map(result => {
+            const safeSource = String(result.source).replace(/[\u0000-\u001F\u007F-\u009F"\\]/g, '');
+            const safeContent = String(result.content).replace(/[\u0000-\u001F\u007F-\u009F"\\]/g, '');
+            return `Source: ${safeSource}\nContent: ${safeContent}\n`;
+        })
+        .join('\n\n---\n\n');
         
         const promptTemplate = `
     You are a helpful Banko Sentral ng Pilipinas (BSP) assistant that answers questions based on the provided context.
     
     Contexts:
     ${contextText}
-    
-    ------------------------
-    Question: ${query}
 
     Answer the question based on the context provided. If you don't know the answer from the context, say so.
-    Also if the context is not relevant to the question use your knowledge to answer the question.
-
-
+    If the context is not relevant to the question use your knowledge to answer the question.
+    - Must be concise and to the point
+    - With explanation if necessary
+    Instructions:
+      1. For regulatory questions:
+         - Base your answer ONLY on the provided context information
+         - Cite specific circular numbers or regulations when relevant
+         - If the answer isn't in the context, say "I don't have enough information to answer this question"
+      
+      2. For technical implementation questions:
+         - Provide guidance using only the approved tech stack:
+           * Backend: NestJS
+           * Frontend: ReactJS (web) and React Native/Expo (mobile)
+           * Database: PostgreSQL
+         - Suggest best practices and architectural patterns
+         - Consider BSP compliance requirements in technical solutions
+      
+      3. General guidelines:
+         - Be concise but thorough
+         - If multiple documents are relevant, synthesize the information
+         - If the question is unclear or cannot be answered with the given context, ask for clarification
+         - When suggesting technical solutions, ensure they align with BSP security and compliance requirements
     `;
 
-        const responseData = await queryModel(promptTemplate, 'gemma3');
+        const responseData = await queryModel(query, promptTemplate, 'gemma3');
 
         return json({
             success: true,
             answer: responseData,
-            sources: sortedResults
+            sources: results
         });
     } catch (error) {
         console.error('Error processing query:', error);
         return json({ success: false, error: error.message }, { status: 500 });
     }
+}
+
+function preprocessQuery(query: string): string {
+    return query.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function generateQueryExpansions(query: string): string[] {
+    const expansions = [];
+    
+    const financialTerms = {
+        'loan': ['credit', 'financing', 'lending', 'debt'],
+        'bank': ['financial institution', 'banking entity', 'lender'],
+        'interest': ['rate', 'yield', 'returns', 'interest rate'],
+        'deposit': ['savings', 'fund', 'investment'],
+        'payment': ['transaction', 'settlement', 'remittance'],
+        'regulation': ['policy', 'guideline', 'directive', 'circular'],
+        'requirement': ['mandate', 'qualification', 'prerequisite'],
+        'compliance': ['adherence', 'conformity', 'observance']
+    };
+    
+    Object.keys(financialTerms).forEach(term => {
+        if (query.includes(term)) {
+            financialTerms[term].forEach(synonym => {
+                expansions.push(query.replace(term, synonym));
+            });
+        }
+    });
+    
+    if (query.startsWith('what')) {
+        expansions.push(query.replace('what', 'which'));
+        expansions.push(query.replace(/^what\s+is/, 'define'));
+    } else if (query.startsWith('how')) {
+        expansions.push(query.replace('how', 'what is the way to'));
+        expansions.push(query.replace(/^how\s+to/, 'procedure for'));
+    }
+    
+    if (!query.includes('bsp') && !query.includes('banko sentral')) {
+        expansions.push(`${query} bsp policy`);
+        expansions.push(`${query} banko sentral regulation`);
+    }
+    
+    return expansions.slice(0, 5);
+}
+
+function applyMMR(docs, queryEmbedding, { lambda = 0.5, k = 3 }) {
+    if (docs.length === 0) return [];
+    
+    docs.forEach(doc => {
+        doc.similarity = 1 - doc.score;
+    });
+    
+    const selected = [];
+    const remaining = [...docs];
+    
+    remaining.sort((a, b) => b.similarity - a.similarity);
+    selected.push(remaining.shift());
+    
+    while (selected.length < k && remaining.length > 0) {
+        let nextBestScore = -Infinity;
+        let nextBestDoc = null;
+        let nextBestIndex = -1;
+        
+        for (let i = 0; i < remaining.length; i++) {
+            const doc = remaining[i];
+            
+            let maxSimilarityToSelected = -Infinity;
+            for (const selectedDoc of selected) {
+                const similarity = calculateDocSimilarity(doc, selectedDoc);
+                maxSimilarityToSelected = Math.max(maxSimilarityToSelected, similarity);
+            }
+            
+            const mmrScore = lambda * doc.similarity - (1 - lambda) * maxSimilarityToSelected;
+            
+            if (mmrScore > nextBestScore) {
+                nextBestScore = mmrScore;
+                nextBestDoc = doc;
+                nextBestIndex = i;
+            }
+        }
+        
+        selected.push(nextBestDoc);
+        remaining.splice(nextBestIndex, 1);
+    }
+    
+    return selected;
+}
+
+function calculateDocSimilarity(doc1, doc2) {
+    const words1 = new Set(doc1.content.toLowerCase().split(/\s+/));
+    const words2 = new Set(doc2.content.toLowerCase().split(/\s+/));
+    
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    const union = new Set([...words1, ...words2]);
+    
+    return intersection.size / union.size;
 }
