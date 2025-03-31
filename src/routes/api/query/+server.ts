@@ -101,16 +101,17 @@ export async function POST({ request }) {
         const aiQueryPrompt = `
         create a query for this question: ${query}
         - it must be accurate so that the chroma collection can find the relevant documents
+        - it must contain the circular letter number, the date, and the title of the circular letter
         - it must be in the form of a list of words, separated by space
         - it must not contain any other text or punctuation
         - it must not contain any special characters or symbols
-        - it must not contain any numbers or digits
         - it must not contain any stop words or filler words
+        - no other text or explanation is needed, just the query
         `;
 
         const aiQueryResponse = await queryModel(aiQueryPrompt, 'gemma3', 0.1);
         console.log('AI Query Response:', aiQueryResponse);
-        const aiQuery = aiQueryResponse.message.content.split('\n')[0].trim().replace(/[^a-zA-Z\s]/g, '');
+        const aiQuery = aiQueryResponse.message.content.split(' ').map(word => word.trim()).filter(word => word !== '');
         console.log('AI Query:', aiQuery);
         
         const embeddingResult = await generateEmbeddings(aiQuery);
