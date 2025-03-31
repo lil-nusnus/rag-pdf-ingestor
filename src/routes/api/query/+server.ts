@@ -99,14 +99,14 @@ export async function POST({ request }) {
         const collection = await getChromaCollection();
 
         const aiQueryPrompt = `
-        create a query for this question: ${query}
+        create an accurate chromadb query for this question: ${query}
         - it must be accurate so that the chroma collection can find the relevant documents
         - it must contain the circular letter number, the date, and the title of the circular letter
         - it must be in the form of a list of words, separated by space
         - it must not contain any other text or punctuation
         - it must not contain any special characters or symbols
         - it must not contain any stop words or filler words
-        - no other text or explanation is needed, just the query
+        - IMPORTANT: no other text or explanation is needed, just the query
         `;
 
         const aiQueryResponse = await queryModel(aiQueryPrompt, 'gemma3', 0.1);
@@ -130,8 +130,7 @@ export async function POST({ request }) {
         const results = await collection.query({
             queryEmbeddings: embeddingResult.embeddings,
             n_results: 5,
-            // when using embeddings, you may want to set the distance metric to cosine or euclidean
-            distanceMetric: 'cosine'
+            include: ["documents", "metadatas", "distances"]
         });
 
 
@@ -164,7 +163,8 @@ export async function POST({ request }) {
     Question: ${query}
 
     Answer the question based on the context provided. If you don't know the answer from the context, say so.
-    Also please focus on the Banko Sentral ng Pilipinas (BSP) legal and regulatory framework, and the National Payment System Framework.
+    Also if the context is not relevant to the question use your knowledge to answer the question.
+
 
     `;
 
