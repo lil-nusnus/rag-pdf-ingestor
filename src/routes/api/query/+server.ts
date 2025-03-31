@@ -80,11 +80,21 @@ export async function POST({ request }) {
             throw new Error('Failed to generate embeddings');
         }
         
+        // // Uncomment the following lines if you want to use embeddings for querying
+        // const results = await collection.query({
+        //     queryEmbeddings: [embeddingResult.embeddings[0]],
+        //     n_results: 5,
+        // });
+
+
         const results = await collection.query({
-            queryEmbeddings: [embeddingResult.embeddings[0]],
-            n_results: 5,
+            queryTexts: [query],
+            n_results: 5
         });
 
+        ///////////////////////////////////////////
+
+        
         const sortedResults = formatResults(results);
 
         const contextText = sortedResults.map(s => `
