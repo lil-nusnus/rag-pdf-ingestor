@@ -1,13 +1,22 @@
-<script>
+<script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import snarkdown from 'snarkdown';
   
-  export let messages = [];
+  interface Source {
+    source: string;
+  }
+  
+  interface Message {
+    role: 'user' | 'assistant';
+    content: string;
+    loading?: boolean;
+    sources?: Source[];
+  }
+  
+  export let messages: Message[] = [];
   
   const dispatch = createEventDispatcher();
   let query = '';
-
-  
+  let chatContainer: HTMLElement;
   
   function handleSubmit() {
     console.log(query)
@@ -15,18 +24,24 @@
     query = '';
   }
   
-  function handleKeydown(event) {
+  function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSubmit();
     }
   }
+
+  // scroll to the bottom of the chat container when a new message is added
+  $: if (messages.length > 0 && chatContainer) {
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+  
 </script>
 
+
+
 <div class="h-full flex flex-col">
-  <h3 class="text-lg font-semibold text-gray-800 mb-4">Ask about your documents</h3>
-  
-  <div class="flex-grow overflow-y-auto mb-4 space-y-4 max-h-[400px] p-2">
+  <div bind:this={chatContainer} class="flex-grow overflow-y-auto mb-4 space-y-4 max-h-[400px] p-2">
     {#if messages.length === 0}
       <div class="text-center py-8 text-gray-500">
         <p>Ask a question about your documents to get started</p>
@@ -42,7 +57,7 @@
                 <div class="w-2 h-2 bg-gray-500 rounded-full animate-pulse" style="animation-delay: 0.4s"></div>
               </div>
             {:else}
-              <p class="whitespace-pre-wrap break-words">{@html snarkdown(message.content.replace(/<([^</> ]+)[^<>]*?>[^<>]*?<\/\1> */gi, ""))}</p>
+              <p class="whitespace-pre-wrap break-words">{@html message.content}</p>
               
               {#if message.sources && message.sources.length > 0}
                 <div class="mt-2 pt-2 border-t border-gray-200">

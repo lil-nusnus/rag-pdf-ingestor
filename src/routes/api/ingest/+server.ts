@@ -55,7 +55,7 @@ async function setupChroma() {
 setupChroma();
 
 const supportedExtensions = ['.txt', '.pdf', '.docx', '.md', '.json'];
-const downloadsPath = 'C:/Users/wenda/OneDrive/Documents/Hyperstacks/rag-pdf-ingestor/downloads';
+const downloadsPath = path.join(process.cwd(), 'downloads');
 
 export async function GET() {
   try {
@@ -99,6 +99,7 @@ export async function POST() {
         
         if (ext === '.txt' || ext === '.md') {
           content = fs.readFileSync(filePath, 'utf8');
+          content = content.replace(/([*_~`>#+-])/g, '').replace(/\n+/g, '\n').trim();
         } else if (ext === '.pdf') {
           const pdfLoader = new PDFLoader(filePath);
           const pdfDocs = await pdfLoader.load();
@@ -113,7 +114,7 @@ export async function POST() {
         
         const splitter = new RecursiveCharacterTextSplitter({
           chunkSize: 1000,
-          chunkOverlap: 200
+          chunkOverlap: 500
         });
         
         const docs = await splitter.createDocuments([content], [{ source: file }]);

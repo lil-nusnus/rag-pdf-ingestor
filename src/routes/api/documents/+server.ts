@@ -7,7 +7,10 @@ import path from 'path';
 
 export async function GET() {
   try {
-    const downloadsPath = 'C:/Users/wenda/OneDrive/Documents/Hyperstacks/rag-pdf-ingestor/downloads';
+    // get the root path of the project
+    const rootPath = process.cwd();
+    // get the downloads path of the user
+    const downloadsPath = path.join(rootPath, 'downloads');
     const supportedExtensions = ['.txt', '.pdf', '.docx', '.md', '.json'];
     
     // Get all files from the downloads directory
@@ -42,6 +45,13 @@ export async function POST({ request }) {
       case 'txt':
       case 'md':
         preview = fs.readFileSync(filePath, 'utf8');
+        const removeMarkdown = (text) => {
+          const markdown = text.replace(/([*_~`>#+-])/g, '');
+          return markdown.replace(/\n+/g, '\n').trim();
+        }
+        preview = removeMarkdown(preview);
+        
+
         break;
       case 'pdf':
         const pdfLoader = new PDFLoader(filePath);

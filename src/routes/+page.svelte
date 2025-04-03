@@ -4,6 +4,7 @@
   import SearchBar from '$lib/components/SearchBar.svelte';
   import ChatInterface from '$lib/components/ChatInterface.svelte';
   import DocumentPreview from '$lib/components/DocumentPreview.svelte';
+
   
   let documents = [];
   let loading = true;
